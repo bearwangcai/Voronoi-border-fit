@@ -4,6 +4,7 @@ import numpy as np
 from math import cos, pi
 import xlwt
 import matplotlib.pyplot as plt
+import matplotlib.path as mplPath
 
 def data():
     At = xlrd.open_workbook(r'E:\中国移动项目示例代码\base.xlsx')
@@ -121,7 +122,23 @@ Lupper.append(pn)  #上包
 Llower = sorted(Llower,key=lambda x: x[0],reverse = True)
 Lupper.extend(Llower)
 Lupper = np.array(Lupper)
-print(Lupper)
+#print(Lupper)
+bbPath = mplPath.Path(Lupper[0:-2])
+px = np.arange(min(thre_points[:, 0]), max(thre_points[:, 0]), 0.02)
+py = np.arange(min(thre_points[:, 1]), max(thre_points[:, 1]), 0.02)
+pxy = []
+for x in px:
+    for y in py:
+        pxy.append((x,y))
+pxy = np.array(pxy)
+pxyreal = []
+for i in pxy:
+    if bbPath.contains_point(i):
+        pxyreal.append(i)
+pxyreal = np.array(pxyreal)
+print(len(pxy))
+print(len(pxyreal))
 plt.plot(Lupper[:,0], Lupper[:,1], 'k-')
+plt.plot(pxyreal[:, 0], pxyreal[:, 1], 'bo')
 plt.show()
 
