@@ -41,6 +41,7 @@ sampley = (anty - antminy) * 111
 cor = np.array(list(zip(samplex, sampley)))
 #print(cor)
 
+
 vor = Voronoi(cor)
 plt.plot(cor[:, 0], cor[:, 1], 'o')
 #plt.plot(vor.vertices[:, 0], vor.vertices[:, 1], '*')
@@ -48,6 +49,9 @@ plt.plot(cor[:, 0], cor[:, 1], 'o')
 plt.xlim(min(samplex) - 20, max(samplex) + 20); plt.ylim(min(sampley) - 20, max(sampley) + 20)
 #plt.xlim(min(lon) - 0.5, max(lon) + 0.5); plt.ylim(min(lat) - 0.5, max(lat) + 0.5)
 
+'''
+如果vor.vertices在vdtr范围内没有基站，同样认为是无效顶点，即为无穷远点
+'''
 corKD = KDTree(cor)
 count1 = []
 for index, item in enumerate(vor.vertices):
@@ -64,44 +68,96 @@ for i in vorrv:
             i[index] = -1
 #print(vorrv)
 
-#for simplex in vor.ridge_vertices:
 '''
-for simplex in vorrv:
-    simplex = np.asarray(simplex)
-    if np.all(simplex >= 0):
-        plt.plot(vor.vertices[simplex, 0], vor.vertices[simplex, 1], 'k-')
+寻找基站外围边界点
 '''
-#print("vor.ridge_points is %r"%vor.ridge_points)
-#print("vor.ridge_vertices is %r"%vor.ridge_vertices)
-#print("vor.vertices is \n%r"%vor.vertices)
-center = cor.mean(axis=0)
-thre_points = []
-for pointidx, simplex in zip(vor.ridge_points, vorrv):
-    simplex = np.asarray(simplex)
-    if np.any(simplex < 0):
-        if np.any(simplex > 0):
-            i = simplex[simplex >= 0][0] # finite end Voronoi vertex
-            t = cor[pointidx[1]] - cor[pointidx[0]]  # tangent
-            t = t / np.linalg.norm(t)
-            n = np.array([-t[1], t[0]]) # normal
-            midpoint = cor[pointidx].mean(axis=0)
-            far_point = vor.vertices[i] + np.sign(np.dot(midpoint - center, n)) * n * 100
-            thre_point = midpoint + np.sign(np.dot(midpoint - center, n)) * n * bdtr
-            #                       np.sign()计算parameter的正负
-            while 1:
-                corKD2 = corKD.query_ball_point(thre_point,bdtr)
-                if len(corKD2) >= 1:
-                    thre_point += np.sign(np.dot(midpoint - center, n)) * n * bdtr
-                else:
-                    break
-            thre_points.append(thre_point)
-            plt.plot(thre_point[0], thre_point[1], 'o', c = 'red')
-            #plt.plot([vor.vertices[i,0], far_point[0]],
-            #         [vor.vertices[i,1], far_point[1]], 'k--')
-thre_points = np.array(thre_points)
-#print(thre_points)
+boundarypoints = []
+for index, item in enumerate(vorrv):
+    #print(item)
+    item = np.array(item)
+    #print(item)
+    if np.any(item < 0):
+        boundarypoints.append(vor.ridge_points[index])
+boundarypoints = np.array(boundarypoints)
+boundarypoints = boundarypoints.flatten()
+boundarypoints = set(list(boundarypoints))
+boundarypointsid = list(boundarypoints)
+#print(boundarypointsid)
 
-A=sorted(thre_points,key=lambda x: x[0])
+t_points = [cor[i] for i in boundarypointsid]
+tlen = len(t_points)
+t_points = np.array(t_points)
+#plt.plot(t_points[:, 0], t_points[:, 1], 'ro')
+#plt.show()
+#print(t_points)
+print(tlen)
+def LUlo():
+    A=sorted(t_points,key=lambda x: x[0])
+    p1=A[0]
+    pn=A[-1]
+
+    Lupper=[]
+    Llower=[]
+    #分成上包和下包两类
+    Lupper.append(p1)
+    for i in A:
+        e=np.array([[i[0],i[1],1],[p1[0],p1[1],1],[pn[0],pn[1],1]])
+        flag=np.linalg.det(e)#行列式右手螺旋法则
+
+        if flag > 0 :
+            Lupper.append(i)
+
+        else :
+            Llower.append(i)
+    Lupper.append(pn)  #上包      
+    Llower = sorted(Llower,key=lambda x: x[0],reverse = True)
+    Lupper.extend(Llower)
+    Lupper = np.array(Lupper)
+    return Lupper
+    
+while 1:
+    Lupper = LUlo()
+    #print(Lupper)
+    bbPath = mplPath.Path(Lupper[0:-2])
+    pxyreal = []
+    for i in cor:
+        if not bbPath.contains_point(i):
+            pxyreal.append(i)
+    #print(pxyreal)
+    t_points = list(t_points)
+    t_points.extend(pxyreal)
+    t_points = list(set(tuple(i) for i in t_points))
+    t_points = np.array(t_points)
+    tlen1 = len(t_points)
+    if tlen1 ==tlen:
+        break
+    else:
+        tlen = tlen1
+    print(tlen)
+
+plt.plot(Lupper[:, 0], Lupper[:, 1], 'ro')
+#plt.show()
+
+
+center = cor.mean(axis=0)
+boundaryp = []
+Lupper = np.array(Lupper)
+for i in range(len(Lupper)):
+    t = Lupper[i] - Lupper[i-1]  # tangent
+    if abs(np.linalg.norm(t)) > 0.0001:
+        t = t / np.linalg.norm(t)
+        n = np.array([-t[1], t[0]]) # normal
+        midpoint = Lupper[[i, i - 1]].mean(axis=0)
+        thre_point = midpoint + np.sign(np.dot(midpoint - center, n)) * n * bdtr
+        if not bbPath.contains_point(thre_point):
+            boundaryp.append(thre_point)
+            plt.plot(thre_point[0], thre_point[1], 'yo')
+
+#plt.show()
+boundaryp = np.array(boundaryp)
+#寻找voronoi图边界点，组成list 将边界点连接，寻找是否有点在边界外，如果有，加进来
+#找到基站中心，延长中心点到list中的点的线长0.5km
+A=sorted(boundaryp,key=lambda x: x[0])
 p1=A[0]
 pn=A[-1]
 
@@ -124,8 +180,8 @@ Lupper.extend(Llower)
 Lupper = np.array(Lupper)
 #print(Lupper)
 bbPath = mplPath.Path(Lupper[0:-2])
-px = np.arange(min(thre_points[:, 0]), max(thre_points[:, 0]), 0.02)
-py = np.arange(min(thre_points[:, 1]), max(thre_points[:, 1]), 0.02)
+px = np.arange(min(boundaryp[:, 0]), max(boundaryp[:, 0]), 0.02)
+py = np.arange(min(boundaryp[:, 1]), max(boundaryp[:, 1]), 0.02)
 pxy = []
 for x in px:
     for y in py:
@@ -141,6 +197,3 @@ print(len(pxyreal))
 plt.plot(Lupper[:,0], Lupper[:,1], 'k-')
 plt.plot(pxyreal[:, 0], pxyreal[:, 1], 'bo')
 plt.show()
-
-#寻找voronoi图边界点，组成list 将边界点连接，寻找是否有点在边界外，如果有，加进来
-#找到基站中心，延长中心点到list中的点的线长0.5km
